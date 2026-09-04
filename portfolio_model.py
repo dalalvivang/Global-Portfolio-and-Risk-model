@@ -227,12 +227,16 @@ plt.show()
 
 
 # 8. SUMMARY TABLES AND STRESS TESTS
-print("\n--- OPTIMIZED WEIGHTS ---")
+print("\n--- OPTIMIZED WEIGHTS (Full-Sample Fit) ---")
 print(pd.Series(port_weights, index=rets_m.columns).sort_values(ascending=False).round(4).head(15))
 
 print("\n--- RISK/REWARD METRICS (Including VaR-95) ---")
 metrics = ['Ann. Return', 'Ann. Vol', 'Sharpe', 'Sortino', 'Max DD', 'Calmar', 'VaR-95', 'CVaR-95']
-report = {"Portfolio (IS)": series_stats(port_rets), "Portfolio (OOS)": series_stats(oos_rets)}
+report = {
+    "Portfolio (IS, fair)": series_stats(is_port_rets),
+    "Portfolio (Full-Sample, reference)": series_stats(port_rets),
+    "Portfolio (OOS)": series_stats(oos_rets),
+}
 for n, s in BENCHMARK_TICKERS.items():
     report[n] = series_stats(bench_m[s].pct_change().dropna())
 print(pd.DataFrame(report, index=metrics).T.round(4))
@@ -243,20 +247,24 @@ stress_periods = {
     "2022 rate shock": ("2022-01-01", "2022-12-31"),
     "China devaluation": ("2015-08-01", "2015-09-30"),
 }
-# Align benchmark returns to rets_m's index first: rets_m.dropna() can drop rows
-# that bench_m still has (e.g. a ticker with a gap or later start date), so the
-# two series are not guaranteed to share the same index/length otherwise.
 urth_aligned = bench_m[BENCHMARK_TICKERS["MSCI World"]].pct_change().reindex(rets_m.index)
 spy_aligned = bench_m[BENCHMARK_TICKERS["S&P 500"]].pct_change().reindex(rets_m.index)
 
 stress_results = []
 for name, (start, end) in stress_periods.items():
     mask = (rets_m.index >= start) & (rets_m.index <= end)
-    is_ret = rets_m[mask].dot(is_weights).sum()
-    # Corrected line for oos_ret calculation:
+    is_ret_fair = rets_m[mask].dot(is_weights).sum()
+    full_ret = rets_m[mask].dot(port_weights).sum()
     oos_mask = (oos_rets.index >= start) & (oos_rets.index <= end)
     oos_ret = oos_rets[oos_mask].sum()
     urth_ret = urth_aligned[mask].sum()
     spy_ret = spy_aligned[mask].sum()
-    stress_results.append({"Period": name, "IS Return": is_ret, "OOS Return": oos_ret, "URTH": urth_ret, "SPY": spy_ret})
+    stress_results.append({
+        "Period": name,
+        "IS Return (fair)": is_ret_fair,
+        "Full-Sample Return (reference)": full_ret,
+        "OOS Return": oos_ret,
+        "URTH": urth_ret,
+        "SPY": spy_ret,
+    })
 print(pd.DataFrame(stress_results).round(4))
